@@ -13,7 +13,7 @@ const QuizConfig: React.FC<QuizConfigProps> = ({ onStart }) => {
     exam: EXAM_CATEGORIES[0].exams[0],
     subject: SYLLABUS[0].name,
     topics: [],
-    questionCount: 10,
+    questionCount: 5,
     difficulty: Difficulty.MEDIUM,
     mode: QuizMode.SOLO,
     player1Name: 'Player 1',
@@ -62,7 +62,7 @@ const QuizConfig: React.FC<QuizConfigProps> = ({ onStart }) => {
       exam: randomExam,
       subject: randomSyllabus.name,
       topics: [randomSyllabus.subtopics[Math.floor(Math.random() * randomSyllabus.subtopics.length)]],
-      questionCount: Math.floor(Math.random() * (120 - 10) + 10),
+      questionCount: Math.floor(Math.random() * (120 - 5) + 5),
       difficulty: difficulties[Math.floor(Math.random() * 3)],
     });
   };
@@ -236,7 +236,7 @@ const QuizConfig: React.FC<QuizConfigProps> = ({ onStart }) => {
             <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{config.questionCount}</span>
           </div>
           <input 
-            type="range" min="10" max="120" step="5"
+            type="range" min="5" max="120" step="5"
             value={config.questionCount}
             onChange={(e) => setConfig({ ...config, questionCount: parseInt(e.target.value) })}
             className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
