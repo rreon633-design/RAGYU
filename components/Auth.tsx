@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { loginUser, registerUser } from '../services/db';
-import { EnvelopeIcon, LockClosedIcon, UserIcon, ArrowRightIcon } from '@heroicons/react/24/outline';
+import { loginUser, registerUser, signInWithGoogle, signInGuest } from '../services/db';
+import { EnvelopeIcon, LockClosedIcon, UserIcon, ArrowRightIcon, SparklesIcon } from '@heroicons/react/24/outline';
 
 interface AuthProps {
   onLogin: (user: User) => void;
@@ -34,6 +34,32 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       onLogin(user);
     } catch (err: any) {
       setError(err.message || "Authentication failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const user = await signInWithGoogle();
+      onLogin(user);
+    } catch (err: any) {
+      setError(err.message || "Google Sign-In failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const user = await signInGuest();
+      onLogin(user);
+    } catch (err: any) {
+      setError(err.message || "Guest login failed.");
     } finally {
       setLoading(false);
     }
@@ -145,7 +171,43 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           </button>
         </form>
 
-        <p className="text-center mt-6 text-xs text-gray-400">
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-100"></div>
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="px-4 bg-white text-gray-400 font-medium">Or continue with</span>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <button 
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full py-3.5 border-2 border-gray-100 rounded-2xl flex items-center justify-center space-x-3 hover:bg-gray-50 hover:border-gray-200 transition-all active:scale-[0.98]"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M23.52 12.32C23.52 11.532 23.456 10.744 23.328 10H12V14.64H18.456C18.176 16.128 17.336 17.392 16.072 18.24V21.232H19.944C22.208 19.144 23.52 16.032 23.52 12.32Z" fill="#4285F4"/>
+              <path d="M12 24C15.24 24 17.96 22.928 19.944 21.232L16.072 18.24C14.992 18.96 13.608 19.392 12 19.392C8.872 19.392 6.224 17.28 5.28 14.456H1.272V17.56C3.256 21.504 7.336 24 12 24Z" fill="#34A853"/>
+              <path d="M5.28 14.456C5.032 13.728 4.888 12.96 4.888 12.16C4.888 11.36 5.032 10.592 5.28 9.864V6.76H1.272C0.464 8.36 0 10.192 0 12.16C0 14.128 0.464 15.96 1.272 17.56L5.28 14.456Z" fill="#FBBC05"/>
+              <path d="M12 4.936C13.76 4.936 15.344 5.544 16.584 6.728L19.992 3.32C17.952 1.416 15.232 0.328 12 0.328C7.336 0.328 3.256 2.824 1.272 6.76L5.28 9.864C6.224 7.04 8.872 4.936 12 4.936Z" fill="#EA4335"/>
+            </svg>
+            <span className="font-bold text-gray-700">Google</span>
+          </button>
+          
+          <button 
+            type="button"
+            onClick={handleGuestLogin}
+            disabled={loading}
+            className="w-full py-3.5 border border-transparent bg-gray-50 rounded-2xl flex items-center justify-center text-gray-600 text-sm font-bold hover:bg-gray-100 hover:text-gray-900 transition-all active:scale-[0.98]"
+          >
+             <SparklesIcon className="w-5 h-5 mr-2 text-amber-500" />
+             Continue as Guest
+          </button>
+        </div>
+
+        <p className="text-center mt-8 text-xs text-gray-400">
           By continuing, you agree to RAGYU's Terms & Privacy Policy.
         </p>
       </div>

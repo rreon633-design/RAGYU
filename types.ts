@@ -17,9 +17,10 @@ export enum QuizMode {
 }
 
 export interface User {
-  id: number;
-  email: string;
+  id: string;
+  email: string | null;
   name: string;
+  isGuest?: boolean;
 }
 
 export interface ExamCategory {

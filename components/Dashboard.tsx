@@ -126,7 +126,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz, user }) => {
         <div className="relative z-10">
           <div className="flex justify-between items-start mb-6">
             <div>
-              <h1 className="text-2xl font-bold font-poppins mb-1">{greeting}, {user.name.split(' ')[0]}! 👋</h1>
+              <h1 className="text-2xl font-bold font-poppins mb-1">{greeting}, {user.name ? user.name.split(' ')[0] : 'Friend'}! 👋</h1>
               <p className="opacity-90 text-sm font-medium text-blue-100">
                 {stats.xp > 0 ? `Level ${stats.level} Scholar • ${stats.xp} XP` : 'Start your journey today!'}
               </p>

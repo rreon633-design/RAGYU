@@ -69,7 +69,8 @@ const App: React.FC = () => {
     setIsQuizActive(false);
 
     if (currentUser) {
-      // Save result to Neon Database with user ID
+      // Save result to Firebase for all users (including guests with UIDs)
+      // Optional: If you don't want to save guest data, check if (!currentUser.isGuest)
       const exam = quizConfig?.exam || 'General';
       const subject = quizConfig?.subject || 'Practice';
       saveQuizResultToDB(result, exam, subject, currentUser.id);

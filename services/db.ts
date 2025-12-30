@@ -1,131 +1,213 @@
 
-import { Pool } from '@neondatabase/serverless';
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signInAnonymously,
+  updateProfile,
+  User as FirebaseUser
+} from "firebase/auth";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  orderBy, 
+  getDocs,
+  Timestamp 
+} from "firebase/firestore";
 import { QuizResult, User } from '../types';
 
-// WARNING: Exposing credentials in client-side code is not secure for production.
-// This is for demonstration/prototyping purposes only.
-const connectionString = "postgresql://neondb_owner:npg_dmicbT5IZ7wW@ep-lingering-pond-a11oe6ug-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
+const firebaseConfig = {
+  apiKey: "AIzaSyBoiFbzB3N8dACsz7HcN0sh6JLYEZjxIgQ",
+  authDomain: "ragyu-fac4b.firebaseapp.com",
+  projectId: "ragyu-fac4b",
+  storageBucket: "ragyu-fac4b.firebasestorage.app",
+  messagingSenderId: "457007238508",
+  appId: "1:457007238508:web:42bfde24ae67a2c4113749",
+  measurementId: "G-WBK2D22507"
+};
 
-const pool = new Pool({ connectionString });
-
-// Simple SHA-256 hash for client-side password handling (Prototype only)
-async function hashPassword(password: string) {
-  const msgBuffer = new TextEncoder().encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 export const initDB = async () => {
-  try {
-    // Create Users Table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        name TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Create History Table (with user_id support)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS quiz_history (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
-        timestamp TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        exam_name TEXT,
-        subject_name TEXT,
-        player1_score INTEGER,
-        player1_accuracy DECIMAL,
-        total_questions INTEGER,
-        full_result JSONB
-      )
-    `);
-    console.log("Neon Database initialized with Users and History");
-  } catch (e) {
-    console.error("Failed to init Neon DB", e);
-  }
+  console.log("Firebase Initialized");
 };
+
+// Helper to map Firebase User to App User
+const mapUser = (u: FirebaseUser): User => ({
+  id: u.uid,
+  email: u.email,
+  name: u.displayName || (u.isAnonymous ? 'Guest Explorer' : 'User'),
+  isGuest: u.isAnonymous
+});
 
 // --- AUTH FUNCTIONS ---
 
 export const registerUser = async (email: string, password: string, name: string): Promise<User> => {
-  const passwordHash = await hashPassword(password);
   try {
-    const res = await pool.query(
-      `INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name`,
-      [email, passwordHash, name]
-    );
-    return res.rows[0];
-  } catch (e: any) {
-    if (e.code === '23505') { // Unique violation
-      throw new Error("Email already exists");
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(userCredential.user, { displayName: name });
+    return mapUser({ ...userCredential.user, displayName: name } as FirebaseUser);
+  } catch (error: any) {
+    if (error.code === 'auth/unauthorized-domain') {
+       throw new Error("Domain not authorized. Please try 'Continue as Guest' for testing.");
     }
-    throw e;
+    throw new Error(error.message);
   }
 };
 
 export const loginUser = async (email: string, password: string): Promise<User> => {
-  const passwordHash = await hashPassword(password);
-  const res = await pool.query(
-    `SELECT id, email, name FROM users WHERE email = $1 AND password_hash = $2`,
-    [email, passwordHash]
-  );
-  
-  if (res.rows.length === 0) {
-    throw new Error("Invalid email or password");
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    return mapUser(userCredential.user);
+  } catch (error: any) {
+    if (error.code === 'auth/unauthorized-domain') {
+       throw new Error("Domain not authorized. Please try 'Continue as Guest' for testing.");
+    }
+    throw new Error(error.message);
   }
-  return res.rows[0];
+};
+
+export const signInWithGoogle = async (): Promise<User> => {
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    return mapUser(result.user);
+  } catch (error: any) {
+    if (error.code === 'auth/unauthorized-domain') {
+       throw new Error("Domain not authorized. Please try 'Continue as Guest' for testing.");
+    }
+    throw new Error(error.message);
+  }
+};
+
+export const signInGuest = async (): Promise<User> => {
+  try {
+    const result = await signInAnonymously(auth);
+    return mapUser(result.user);
+  } catch (error: any) {
+    console.warn("Firebase Guest Login failed (likely unauthorized domain), falling back to local mode.", error);
+    // Fallback: Create a local session user
+    return {
+      id: `local-guest-${Date.now()}`,
+      email: null,
+      name: 'Guest Explorer',
+      isGuest: true
+    };
+  }
 };
 
 // --- DATA FUNCTIONS ---
 
-export const saveQuizResultToDB = async (result: QuizResult, examName: string, subjectName: string, userId: number) => {
+const LOCAL_STORAGE_HISTORY_KEY = 'ragyu_local_history';
+
+export const saveQuizResultToDB = async (result: QuizResult, examName: string, subjectName: string, userId: string) => {
+  // 1. Local Fallback for Guests or Offline usage
+  if (userId.startsWith('local-')) {
+    try {
+      const existingData = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
+      const history = existingData ? JSON.parse(existingData) : [];
+      
+      const newEntry = {
+        userId,
+        timestamp: new Date().toISOString(), // Store as ISO string
+        examName,
+        subjectName,
+        player1Score: result.player1.score,
+        player1Accuracy: result.player1.accuracy,
+        totalQuestions: result.totalQuestions,
+        fullResult: JSON.stringify(result)
+      };
+      
+      history.push(newEntry);
+      localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(history));
+      console.log("Result saved to LocalStorage");
+      return;
+    } catch (e) {
+      console.error("Failed to save to LocalStorage", e);
+      return;
+    }
+  }
+
+  // 2. Firebase Firestore Storage
   try {
-    const query = `
-      INSERT INTO quiz_history 
-      (user_id, timestamp, exam_name, subject_name, player1_score, player1_accuracy, total_questions, full_result)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    `;
-    const values = [
+    await addDoc(collection(db, "quiz_history"), {
       userId,
-      new Date().toISOString(),
+      timestamp: Timestamp.now(),
       examName,
       subjectName,
-      result.player1.score,
-      result.player1.accuracy,
-      result.totalQuestions,
-      JSON.stringify(result)
-    ];
-    await pool.query(query, values);
-    console.log("Result saved to Neon DB");
+      player1Score: result.player1.score,
+      player1Accuracy: result.player1.accuracy,
+      totalQuestions: result.totalQuestions,
+      fullResult: JSON.stringify(result)
+    });
+    console.log("Result saved to Firestore");
   } catch (e) {
-    console.error("Failed to save result to Neon DB", e);
+    console.error("Failed to save result to Firestore", e);
   }
 };
 
-export const getHistoryFromDB = async (userId: number) => {
+export const getHistoryFromDB = async (userId: string) => {
+  // 1. Local Fallback Retrieval
+  if (userId.startsWith('local-')) {
+    try {
+      const existingData = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
+      const history = existingData ? JSON.parse(existingData) : [];
+      // Filter by userId and sort desc
+      return history
+        .filter((h: any) => h.userId === userId)
+        .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .map((data: any) => ({
+          timestamp: data.timestamp,
+          examName: data.examName,
+          subjectName: data.subjectName,
+          player1: {
+            score: data.player1Score,
+            accuracy: data.player1Accuracy
+          },
+          totalQuestions: data.totalQuestions,
+        }));
+    } catch (e) {
+      console.error("Failed to fetch from LocalStorage", e);
+      return [];
+    }
+  }
+
+  // 2. Firebase Firestore Retrieval
   try {
-    const res = await pool.query(
-      'SELECT * FROM quiz_history WHERE user_id = $1 ORDER BY timestamp DESC',
-      [userId]
+    const q = query(
+      collection(db, "quiz_history"),
+      where("userId", "==", userId),
+      orderBy("timestamp", "desc")
     );
     
-    // Map DB rows to the shape expected by the Dashboard
-    return res.rows.map(row => ({
-      timestamp: row.timestamp,
-      examName: row.exam_name,
-      subjectName: row.subject_name,
-      player1: {
-        score: row.player1_score,
-        accuracy: parseFloat(row.player1_accuracy as any)
-      },
-      totalQuestions: row.total_questions,
-    }));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        timestamp: data.timestamp.toDate().toISOString(),
+        examName: data.examName,
+        subjectName: data.subjectName,
+        player1: {
+          score: data.player1Score,
+          accuracy: data.player1Accuracy
+        },
+        totalQuestions: data.totalQuestions,
+      };
+    });
   } catch (e) {
-    console.error("Failed to fetch history from Neon DB", e);
+    console.error("Failed to fetch history from Firestore", e);
     return [];
   }
 };
