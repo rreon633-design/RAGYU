@@ -4,11 +4,12 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area
 } from 'recharts';
-import { AppTab } from '../types';
+import { AppTab, User } from '../types';
 import { getHistoryFromDB } from '../services/db';
 
 interface DashboardProps {
   onStartQuiz: () => void;
+  user: User;
 }
 
 interface HistoryItem {
@@ -22,7 +23,7 @@ interface HistoryItem {
   totalQuestions: number;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz, user }) => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [greeting, setGreeting] = useState('');
   const [loading, setLoading] = useState(true);
@@ -32,7 +33,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz }) => {
     const loadData = async () => {
       setLoading(true);
       try {
-        const dbHistory = await getHistoryFromDB();
+        const dbHistory = await getHistoryFromDB(user.id);
         setHistory(dbHistory);
       } catch (e) {
         console.error("Failed to load history", e);
@@ -41,14 +42,16 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz }) => {
       }
     };
 
-    loadData();
+    if (user.id) {
+        loadData();
+    }
 
     // Set dynamic greeting
     const hour = new Date().getHours();
     if (hour < 12) setGreeting('Good Morning');
     else if (hour < 18) setGreeting('Good Afternoon');
     else setGreeting('Good Evening');
-  }, []);
+  }, [user.id]);
 
   // Compute Stats
   const stats = useMemo(() => {
@@ -123,14 +126,14 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz }) => {
         <div className="relative z-10">
           <div className="flex justify-between items-start mb-6">
             <div>
-              <h1 className="text-2xl font-bold font-poppins mb-1">{greeting}, Aspirant! 👋</h1>
+              <h1 className="text-2xl font-bold font-poppins mb-1">{greeting}, {user.name.split(' ')[0]}! 👋</h1>
               <p className="opacity-90 text-sm font-medium text-blue-100">
                 {stats.xp > 0 ? `Level ${stats.level} Scholar • ${stats.xp} XP` : 'Start your journey today!'}
               </p>
             </div>
             <div className="bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20">
                <span className="text-xs font-bold uppercase tracking-wider">Rank</span>
-               <div className="text-lg font-black leading-none">Novice</div>
+               <div className="text-lg font-black leading-none">{stats.level < 5 ? 'Novice' : stats.level < 10 ? 'Aspirant' : 'Master'}</div>
             </div>
           </div>
           

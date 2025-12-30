@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { QuizConfig as IQuizConfig, Question, QuizResult, QuizMode, PlayerResult, UserSettings } from '../types';
 import FormattedText from './FormattedText';
 import { generateQuizQuestions } from '../services/geminiService';
-import { LockClosedIcon, UserIcon, UsersIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
+import { UserIcon, UsersIcon, XMarkIcon, ChevronLeftIcon, ChevronRightIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
 
 interface QuizSessionProps {
   config: IQuizConfig;
@@ -23,7 +23,6 @@ const QuizSession: React.FC<QuizSessionProps> = ({ config, userSettings, onCompl
   const [p2Answers, setP2Answers] = useState<(number | null)[]>([]);
   const [p1Time, setP1Time] = useState(0);
   const [p2Time, setP2Time] = useState(0);
-  const [isIntermission, setIsIntermission] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
 
   // Fetch Questions on Mount
@@ -55,7 +54,7 @@ const QuizSession: React.FC<QuizSessionProps> = ({ config, userSettings, onCompl
 
   // Timer Logic
   useEffect(() => {
-    if (isIntermission || isLoading || questions.length === 0) return;
+    if (isLoading || questions.length === 0) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
@@ -69,7 +68,7 @@ const QuizSession: React.FC<QuizSessionProps> = ({ config, userSettings, onCompl
       else setP2Time(t => t + 1);
     }, 1000);
     return () => clearInterval(timer);
-  }, [isIntermission, activePlayer, isLoading, questions.length]);
+  }, [activePlayer, isLoading, questions.length]); // Removed isIntermission dependency
 
   const handleOptionSelect = (optionIdx: number) => {
     const newAnswers = [...currentAnswers];
@@ -88,39 +87,25 @@ const QuizSession: React.FC<QuizSessionProps> = ({ config, userSettings, onCompl
       }
     } else {
       // VERSUS FLOW (1 vs 1)
-      // Logic: P1 answers Q1 -> Handoff -> P2 answers Q1 -> Handoff -> P1 answers Q2 ...
+      // Logic: P1 answers Q1 -> Switch to P2 -> P2 answers Q1 -> Switch to P1 (Next Q)
       
       if (activePlayer === 1) {
-        // Player 1 finished their turn for this question.
-        // Show intermission to pass device to Player 2.
-        setIsIntermission(true);
+        // Switch to Player 2 for the same question
+        setActivePlayer(2);
+        setTimeLeft(60);
       } else {
         // Player 2 finished their turn for this question.
         if (currentIndex < questions.length - 1) {
-          // Show intermission to pass device back to Player 1 for NEXT question.
-          setIsIntermission(true);
+          // Switch back to Player 1 for NEXT question.
+          setActivePlayer(1);
+          setCurrentIndex(prev => prev + 1);
+          setTimeLeft(60);
         } else {
           // Both players finished the last question.
           finalizeResults();
         }
       }
     }
-  };
-
-  const handleStartNextTurn = () => {
-    // If Player 1 just finished, it's Player 2's turn on SAME question
-    if (activePlayer === 1) {
-      setActivePlayer(2);
-      // Do NOT increment currentIndex yet
-    } 
-    // If Player 2 just finished, it's Player 1's turn on NEXT question
-    else {
-      setActivePlayer(1);
-      setCurrentIndex(prev => prev + 1);
-    }
-    
-    setTimeLeft(60); // Reset timer for the new turn
-    setIsIntermission(false);
   };
 
   const finalizeResults = useCallback(() => {
@@ -200,54 +185,6 @@ const QuizSession: React.FC<QuizSessionProps> = ({ config, userSettings, onCompl
             Retry
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // --- INTERMISSION STATE (HANDOFF) ---
-  if (isIntermission) {
-    // Determine who is UP NEXT
-    const nextPlayerNum = activePlayer === 1 ? 2 : 1;
-    const nextPlayerName = nextPlayerNum === 1 ? config.player1Name : config.player2Name;
-    const isNewQuestion = activePlayer === 2; // If P2 just finished, next is P1 on NEW Question
-
-    return (
-      <div className="fixed inset-0 bg-white z-[100] flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
-        <div className="relative mb-10">
-          <div className="w-28 h-28 bg-blue-600 rounded-[2.5rem] flex items-center justify-center text-white shadow-2xl shadow-blue-200 animate-bounce">
-            <LockClosedIcon className="w-14 h-14" />
-          </div>
-          <div className="absolute -top-3 -right-3 w-10 h-10 bg-emerald-500 border-4 border-white rounded-full flex items-center justify-center text-white text-xs font-black">✓</div>
-        </div>
-        
-        <div className="space-y-2 mb-12">
-          <h2 className="text-3xl font-black font-poppins text-gray-900">
-            {activePlayer === 1 ? config.player1Name : config.player2Name}'s Turn Done
-          </h2>
-          <p className="text-gray-500 max-w-sm mx-auto leading-relaxed text-sm">
-            Please hand the device to <strong className="text-blue-600">{nextPlayerName}</strong>. 
-            Content is hidden for fairness.
-          </p>
-        </div>
-
-        <div className="w-full max-w-sm p-8 bg-blue-50/50 rounded-[3rem] border border-blue-100 mb-12 relative overflow-hidden">
-           <div className="absolute top-0 right-0 p-4 opacity-5">
-              <UsersIcon className="w-20 h-20" />
-           </div>
-           <p className="text-[10px] uppercase font-black text-blue-400 mb-4 tracking-[0.2em]">Next Challenger</p>
-           <h3 className="text-3xl font-black text-blue-900 tracking-tighter mb-2">{nextPlayerName}</h3>
-           <p className="text-xs text-blue-600/60 font-medium italic">
-             {isNewQuestion ? `Starting Question ${currentIndex + 2}` : `Attempting Question ${currentIndex + 1}`}
-           </p>
-        </div>
-
-        <button 
-          onClick={handleStartNextTurn}
-          className="w-full max-w-xs py-6 bg-blue-600 text-white font-black rounded-3xl shadow-2xl shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center group text-lg"
-        >
-          I am {nextPlayerName}
-          <ChevronRightIcon className="w-6 h-6 ml-2 group-hover:translate-x-2 transition-transform" />
-        </button>
       </div>
     );
   }
@@ -379,8 +316,7 @@ const QuizSession: React.FC<QuizSessionProps> = ({ config, userSettings, onCompl
         <div className="max-w-3xl mx-auto w-full flex space-x-4">
           <button
             onClick={() => {
-                // Only allow going back if in Solo mode or if it's the current player's question (but can't go to previous P1 question as P2)
-                // For simplicity in Versus turn-based, disable back button to prevent peeking at previous answers of opponent
+                // Only allow going back if in Solo mode
                 if(config.mode === QuizMode.SOLO) setCurrentIndex(prev => Math.max(0, prev - 1));
             }}
             disabled={currentIndex === 0 || config.mode === QuizMode.VERSUS}
@@ -397,7 +333,7 @@ const QuizSession: React.FC<QuizSessionProps> = ({ config, userSettings, onCompl
             }`}
           >
             {config.mode === QuizMode.VERSUS 
-              ? (activePlayer === 1 ? 'CONFIRM & PASS' : (currentIndex === questions.length - 1 ? 'FINISH BATTLE' : 'NEXT QUESTION')) 
+              ? (currentIndex === questions.length - 1 && activePlayer === 2 ? 'FINISH BATTLE' : (activePlayer === 1 ? 'NEXT PLAYER' : 'NEXT QUESTION')) 
               : (currentIndex === questions.length - 1 ? 'SEE RESULTS' : 'PROCEED TO NEXT')
             }
             <ChevronRightIcon className="w-5 h-5 ml-2" />

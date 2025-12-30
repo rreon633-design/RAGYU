@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { AppTab } from '../types';
+import { AppTab, User } from '../types';
 import { 
   HomeIcon, 
   AcademicCapIcon, 
@@ -18,10 +18,12 @@ interface LayoutProps {
   setActiveTab: (tab: AppTab) => void;
   onOpenSettings?: () => void;
   children: React.ReactNode;
+  user?: User | null;
 }
 
-const Layout: React.FC<LayoutProps> = ({ activeTab, setActiveTab, onOpenSettings, children }) => {
+const Layout: React.FC<LayoutProps> = ({ activeTab, setActiveTab, onOpenSettings, children, user }) => {
   const isChat = activeTab === AppTab.CHATBOT;
+  const userInitials = user ? user.name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase() : 'U';
 
   return (
     <div className={`flex flex-col bg-white ${isChat ? 'h-[100dvh] overflow-hidden' : 'min-h-screen pb-20'}`}>
@@ -40,11 +42,9 @@ const Layout: React.FC<LayoutProps> = ({ activeTab, setActiveTab, onOpenSettings
             <Cog6ToothIcon className="w-6 h-6" />
           </button>
           <button className="p-1 rounded-full border-2 border-transparent hover:border-blue-500 transition-all">
-            <img 
-              src="https://picsum.photos/seed/user123/40/40" 
-              className="w-8 h-8 rounded-full"
-              alt="Profile"
-            />
+            <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-800">
+               {userInitials}
+            </div>
           </button>
         </div>
       </header>

@@ -2,16 +2,17 @@
 import React from 'react';
 import { UserSettings } from '../types';
 import { EXAM_CATEGORIES, SYLLABUS } from '../constants';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: UserSettings;
   onSave: (settings: UserSettings) => void;
+  onLogout?: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSave }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSave, onLogout }) => {
   if (!isOpen) return null;
 
   const toggleItem = (list: string[], item: string) => {
@@ -93,6 +94,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
               ))}
             </div>
           </section>
+
+          {onLogout && (
+             <section className="pt-4 border-t border-gray-100">
+                <button 
+                  onClick={onLogout}
+                  className="w-full flex items-center justify-center space-x-2 py-3 bg-rose-50 text-rose-600 font-bold rounded-xl hover:bg-rose-100 transition-colors"
+                >
+                   <ArrowRightOnRectangleIcon className="w-5 h-5" />
+                   <span>Log Out</span>
+                </button>
+             </section>
+          )}
         </div>
 
         <footer className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end">

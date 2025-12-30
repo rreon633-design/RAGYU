@@ -16,6 +16,12 @@ export enum QuizMode {
   VERSUS = '1vs1'
 }
 
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+}
+
 export interface ExamCategory {
   id: string;
   name: string;

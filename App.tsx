@@ -7,10 +7,12 @@ import QuizSession from './components/QuizSession';
 import QuizReport from './components/QuizReport';
 import LibraChat from './components/LibraChat';
 import SettingsModal from './components/SettingsModal';
-import { AppTab, QuizConfig as IQuizConfig, QuizResult, UserSettings } from './types';
+import Auth from './components/Auth';
+import { AppTab, QuizConfig as IQuizConfig, QuizResult, UserSettings, User } from './types';
 import { initDB, saveQuizResultToDB } from './services/db';
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [userSettings, setUserSettings] = useState<UserSettings>({
@@ -25,14 +27,31 @@ const App: React.FC = () => {
   const [quizConfig, setQuizConfig] = useState<IQuizConfig | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
 
-  // Load settings from local storage and Init DB
+  // Initialize DB and Load User/Settings
   useEffect(() => {
-    const saved = localStorage.getItem('ragyu_settings');
-    if (saved) setUserSettings(JSON.parse(saved));
-    
-    // Initialize Neon DB connection
     initDB();
+    
+    // Load Settings
+    const savedSettings = localStorage.getItem('ragyu_settings');
+    if (savedSettings) setUserSettings(JSON.parse(savedSettings));
+
+    // Load Session
+    const savedUser = localStorage.getItem('ragyu_user');
+    if (savedUser) setCurrentUser(JSON.parse(savedUser));
   }, []);
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+    localStorage.setItem('ragyu_user', JSON.stringify(user));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('ragyu_user');
+    setActiveTab(AppTab.HOME);
+    setQuizResult(null);
+    setIsQuizActive(false);
+  };
 
   const saveSettings = (newSettings: UserSettings) => {
     setUserSettings(newSettings);
@@ -49,10 +68,12 @@ const App: React.FC = () => {
     setQuizResult(result);
     setIsQuizActive(false);
 
-    // Save result to Neon Database
-    const exam = quizConfig?.exam || 'General';
-    const subject = quizConfig?.subject || 'Practice';
-    saveQuizResultToDB(result, exam, subject);
+    if (currentUser) {
+      // Save result to Neon Database with user ID
+      const exam = quizConfig?.exam || 'General';
+      const subject = quizConfig?.subject || 'Practice';
+      saveQuizResultToDB(result, exam, subject, currentUser.id);
+    }
   };
 
   const resetQuizFlow = () => {
@@ -60,6 +81,11 @@ const App: React.FC = () => {
     setQuizConfig(null);
     setIsQuizActive(false);
   };
+
+  // If not logged in, show Auth screen
+  if (!currentUser) {
+    return <Auth onLogin={handleLogin} />;
+  }
 
   const renderTabContent = () => {
     if (activeTab === AppTab.QUIZ && quizResult) {
@@ -74,13 +100,13 @@ const App: React.FC = () => {
 
     switch (activeTab) {
       case AppTab.HOME:
-        return <Dashboard onStartQuiz={() => setActiveTab(AppTab.QUIZ)} />;
+        return <Dashboard user={currentUser} onStartQuiz={() => setActiveTab(AppTab.QUIZ)} />;
       case AppTab.QUIZ:
         return <QuizConfig onStart={startQuiz} />;
       case AppTab.CHATBOT:
         return <LibraChat />;
       default:
-        return <Dashboard onStartQuiz={() => setActiveTab(AppTab.QUIZ)} />;
+        return <Dashboard user={currentUser} onStartQuiz={() => setActiveTab(AppTab.QUIZ)} />;
     }
   };
 
@@ -89,6 +115,7 @@ const App: React.FC = () => {
       activeTab={activeTab} 
       setActiveTab={setActiveTab}
       onOpenSettings={() => setIsSettingsOpen(true)}
+      user={currentUser}
     >
       {renderTabContent()}
       
@@ -108,6 +135,7 @@ const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         settings={userSettings}
         onSave={saveSettings}
+        onLogout={handleLogout}
       />
     </Layout>
   );
