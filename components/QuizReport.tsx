@@ -141,14 +141,35 @@ const QuizReport: React.FC<QuizReportProps> = ({ result, config, onDone }) => {
               </div>
 
               <div className="bg-blue-50/40 rounded-2xl p-5 text-sm text-blue-900 border border-blue-100">
-                <div className="flex items-center space-x-2 mb-3">
-                   <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-[10px]">💡</div>
-                   <span className="font-bold text-blue-900 uppercase tracking-tighter text-xs">Expert Solution</span>
+                <div className="flex items-center justify-between mb-3">
+                   <div className="flex items-center space-x-2">
+                     <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-[10px]">💡</div>
+                     <span className="font-bold text-blue-900 uppercase tracking-tighter text-xs">Expert Solution</span>
+                   </div>
+                   {question.explanation.visualAid && (
+                     <span className="text-[10px] font-bold text-blue-400 bg-white px-2 py-1 rounded border border-blue-100">Visual Solution Included</span>
+                   )}
                 </div>
-                {/* Build formatted explanation string */}
-                <FormattedText 
-                  content={`**Concept:** ${question.explanation.concept}\n\n**Steps:**\n${question.explanation.steps.map(s => `- ${s}`).join('\n')}\n\n[ORANGE]Pro-Tip: ${question.explanation.tricks.join('. ')}[/ORANGE]`} 
-                />
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                   {/* Text Explanation */}
+                   <div className={`${question.explanation.visualAid ? 'md:col-span-2' : 'md:col-span-3'}`}>
+                      <FormattedText 
+                        content={`**Concept:** ${question.explanation.concept}\n\n**Steps:**\n${question.explanation.steps.map(s => `- ${s}`).join('\n')}\n\n[ORANGE]Pro-Tip: ${question.explanation.tricks.join('. ')}[/ORANGE]`} 
+                      />
+                   </div>
+
+                   {/* Visual Aid Column */}
+                   {question.explanation.visualAid && (
+                     <div className="md:col-span-1 bg-white rounded-xl border-2 border-dashed border-blue-200 p-2 flex flex-col items-center justify-center">
+                        <p className="text-[9px] text-blue-400 uppercase font-bold tracking-widest mb-2 w-full text-center">Visual Aid</p>
+                        <div 
+                           className="w-full h-auto max-h-48 flex items-center justify-center svg-container"
+                           dangerouslySetInnerHTML={{ __html: question.explanation.visualAid }}
+                        />
+                     </div>
+                   )}
+                </div>
               </div>
             </div>
           );

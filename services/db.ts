@@ -61,7 +61,7 @@ export const registerUser = async (email: string, password: string, name: string
   } catch (error: any) {
     // If domain is unauthorized (localhost/preview), fallback to local user
     if (error.code === 'auth/unauthorized-domain' || error.code === 'auth/operation-not-allowed') {
-       console.warn("Firebase Auth blocked by domain policy. Falling back to Local Mode.");
+       console.log("Firebase Auth blocked by domain policy. Falling back to Local Mode.");
        return {
          id: `local-user-${Date.now()}`,
          email: email,
@@ -80,7 +80,7 @@ export const loginUser = async (email: string, password: string): Promise<User> 
   } catch (error: any) {
     // If domain is unauthorized, fallback to local logic so the user can still enter the app
     if (error.code === 'auth/unauthorized-domain') {
-       console.warn("Firebase Auth blocked. Falling back to Local Mode.");
+       console.log("Firebase Auth blocked. Falling back to Local Mode.");
        return {
          id: `local-user-${Date.now()}`, 
          email: email,
@@ -100,7 +100,7 @@ export const signInWithGoogle = async (): Promise<User> => {
   } catch (error: any) {
     // Catch domain errors and fall back to a simulated Google User
     if (error.code === 'auth/unauthorized-domain' || error.code === 'auth/operation-not-allowed') {
-       console.warn("Google Sign In blocked by domain policy. Falling back to Local Mode.");
+       console.log("Google Sign In blocked by domain policy. Falling back to Local Mode.");
        return {
          id: `local-google-${Date.now()}`,
          email: 'google-user@example.com',
@@ -117,7 +117,7 @@ export const signInGuest = async (): Promise<User> => {
     const result = await signInAnonymously(auth);
     return mapUser(result.user);
   } catch (error: any) {
-    console.warn("Firebase Guest Login failed, falling back to local mode.", error);
+    console.log("Firebase Guest Login failed, falling back to local mode.");
     return {
       id: `local-guest-${Date.now()}`,
       email: null,

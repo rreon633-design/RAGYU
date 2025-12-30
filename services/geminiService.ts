@@ -51,7 +51,12 @@ export const generateQuizQuestions = async (config: QuizConfig, userPreferences?
   3. Provide exactly 4 options for each question.
   4. The 'correctIndex' must be 0, 1, 2, or 3.
   5. The 'explanation' must be detailed and helpful for students.
-  6. Return STRICT JSON.
+  6. **CRITICAL**: Include a 'visualAid' field containing a valid raw SVG string (<svg...></svg>) that visually explains the solution. 
+     - For Geometry: Draw the labeled shape.
+     - For Data Interpretation: Draw a simple bar/pie chart.
+     - For Logic/Reasoning: Draw a flowchart or diagram.
+     - Keep SVGs simple, using a standard viewBox="0 0 300 200". Use attractive colors (blues, emeralds, oranges).
+  7. Return STRICT JSON.
   `;
 
   const responseSchema: Schema = {
@@ -80,9 +85,10 @@ export const generateQuizQuestions = async (config: QuizConfig, userPreferences?
               items: { type: Type.STRING },
               description: "Shortcuts or tips"
             },
-            concept: { type: Type.STRING, description: "The core concept tested" }
+            concept: { type: Type.STRING, description: "The core concept tested" },
+            visualAid: { type: Type.STRING, description: "A raw SVG string (<svg ...>...</svg>) illustrating the solution or concept. Do not wrap in markdown code blocks." }
           },
-          required: ["steps", "tricks", "concept"]
+          required: ["steps", "tricks", "concept", "visualAid"]
         }
       },
       required: ["id", "text", "options", "correctIndex", "explanation"]

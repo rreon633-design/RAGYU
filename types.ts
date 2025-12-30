@@ -55,6 +55,7 @@ export interface Question {
     steps: string[];
     tricks: string[];
     concept: string;
+    visualAid?: string;
   };
 }
 
