@@ -5,6 +5,7 @@ import {
   AreaChart, Area
 } from 'recharts';
 import { AppTab } from '../types';
+import { getHistoryFromDB } from '../services/db';
 
 interface DashboardProps {
   onStartQuiz: () => void;
@@ -24,21 +25,19 @@ interface HistoryItem {
 const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz }) => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [greeting, setGreeting] = useState('');
+  const [loading, setLoading] = useState(true);
 
   // Load Data on Mount
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
+      setLoading(true);
       try {
-        const stored = localStorage.getItem('ragyu_history');
-        if (stored) {
-          // Sort by date descending (newest first)
-          const parsed = JSON.parse(stored).sort((a: any, b: any) => 
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          );
-          setHistory(parsed);
-        }
+        const dbHistory = await getHistoryFromDB();
+        setHistory(dbHistory);
       } catch (e) {
-        console.error("Failed to load history");
+        console.error("Failed to load history", e);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -175,7 +174,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz }) => {
         </div>
         
         <div className="h-48 w-full">
-          {stats.totalQuizzes > 0 ? (
+          {loading ? (
+             <div className="h-full flex flex-col items-center justify-center text-gray-300">
+                <div className="w-6 h-6 border-2 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+                <span className="text-xs">Loading stats...</span>
+             </div>
+          ) : stats.totalQuizzes > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
@@ -234,7 +238,13 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartQuiz }) => {
         </div>
         
         <div className="space-y-3">
-          {history.length === 0 ? (
+          {loading ? (
+             <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="h-20 bg-gray-50 rounded-3xl animate-pulse"></div>
+                ))}
+             </div>
+          ) : history.length === 0 ? (
             <div className="bg-gray-50 border border-gray-100 rounded-3xl p-8 text-center">
               <p className="text-gray-500 text-sm mb-4">You haven't taken any quizzes yet.</p>
               <button 

@@ -8,6 +8,7 @@ import QuizReport from './components/QuizReport';
 import LibraChat from './components/LibraChat';
 import SettingsModal from './components/SettingsModal';
 import { AppTab, QuizConfig as IQuizConfig, QuizResult, UserSettings } from './types';
+import { initDB, saveQuizResultToDB } from './services/db';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.HOME);
@@ -24,10 +25,13 @@ const App: React.FC = () => {
   const [quizConfig, setQuizConfig] = useState<IQuizConfig | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
 
-  // Load settings from local storage
+  // Load settings from local storage and Init DB
   useEffect(() => {
     const saved = localStorage.getItem('ragyu_settings');
     if (saved) setUserSettings(JSON.parse(saved));
+    
+    // Initialize Neon DB connection
+    initDB();
   }, []);
 
   const saveSettings = (newSettings: UserSettings) => {
@@ -45,24 +49,10 @@ const App: React.FC = () => {
     setQuizResult(result);
     setIsQuizActive(false);
 
-    // Save result to history for Dashboard
-    try {
-      const historyStr = localStorage.getItem('ragyu_history');
-      const history = historyStr ? JSON.parse(historyStr) : [];
-      
-      // Add timestamp and config details to the history record
-      const historyEntry = {
-        ...result,
-        timestamp: new Date().toISOString(),
-        examName: quizConfig?.exam || 'General',
-        subjectName: quizConfig?.subject || 'Practice'
-      };
-      
-      const updatedHistory = [...history, historyEntry];
-      localStorage.setItem('ragyu_history', JSON.stringify(updatedHistory));
-    } catch (e) {
-      console.error("Failed to save history", e);
-    }
+    // Save result to Neon Database
+    const exam = quizConfig?.exam || 'General';
+    const subject = quizConfig?.subject || 'Practice';
+    saveQuizResultToDB(result, exam, subject);
   };
 
   const resetQuizFlow = () => {
