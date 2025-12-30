@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -43,6 +44,25 @@ const App: React.FC = () => {
   const completeQuiz = (result: QuizResult) => {
     setQuizResult(result);
     setIsQuizActive(false);
+
+    // Save result to history for Dashboard
+    try {
+      const historyStr = localStorage.getItem('ragyu_history');
+      const history = historyStr ? JSON.parse(historyStr) : [];
+      
+      // Add timestamp and config details to the history record
+      const historyEntry = {
+        ...result,
+        timestamp: new Date().toISOString(),
+        examName: quizConfig?.exam || 'General',
+        subjectName: quizConfig?.subject || 'Practice'
+      };
+      
+      const updatedHistory = [...history, historyEntry];
+      localStorage.setItem('ragyu_history', JSON.stringify(updatedHistory));
+    } catch (e) {
+      console.error("Failed to save history", e);
+    }
   };
 
   const resetQuizFlow = () => {
