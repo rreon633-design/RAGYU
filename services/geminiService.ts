@@ -1,0 +1,119 @@
+import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { LIBRA_SYSTEM_PROMPT } from "../constants";
+import { QuizConfig, Question, UserSettings } from "../types";
+
+export const getLibraResponse = async (history: { role: string; content: string }[]) => {
+  // Re-initialize to ensure the latest API Key is used if it changes
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: history.map(h => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: h.content }]
+      })),
+      config: {
+        systemInstruction: LIBRA_SYSTEM_PROMPT,
+        temperature: 0.7,
+      },
+    });
+
+    return response.text || "I'm sorry, I couldn't process that.";
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    return "Something went wrong. Please check your connection or project settings.";
+  }
+};
+
+export const generateQuizQuestions = async (config: QuizConfig, userPreferences?: UserSettings): Promise<Question[]> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
+  let preferencesContext = '';
+  if (userPreferences) {
+    const topics = userPreferences.preferredTopics?.join(', ');
+    if (topics) {
+      preferencesContext = `\n  User Context:
+  - Preferred Topics: ${topics}
+  
+  Instruction: If the user's preferred topics fall within the requested Subject (${config.subject}), prioritize generating questions for them.`;
+    }
+  }
+
+  const prompt = `Generate ${config.questionCount} multiple-choice questions for the ${config.exam} exam.
+  Subject: ${config.subject}
+  Topics: ${config.topics.length > 0 ? config.topics.join(', ') : 'General syllabus topics'}
+  Difficulty: ${config.difficulty}${preferencesContext}
+
+  REQUIREMENTS:
+  1. Questions must be highly relevant to Indian Government exams (RRB, IBPS, SBI, SSC).
+  2. Use LaTeX for ANY mathematical expressions or formulas (e.g., $x^2 + y^2$, $\\frac{a}{b}$).
+  3. Provide exactly 4 options for each question.
+  4. The 'correctIndex' must be 0, 1, 2, or 3.
+  5. The 'explanation' must be detailed and helpful for students.
+  6. Return STRICT JSON.
+  `;
+
+  const responseSchema: Schema = {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        id: { type: Type.STRING },
+        text: { type: Type.STRING, description: "The question text. Use markdown and LaTeX where appropriate." },
+        options: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "Exactly 4 options"
+        },
+        correctIndex: { type: Type.INTEGER, description: "Index of the correct option (0-3)" },
+        explanation: {
+          type: Type.OBJECT,
+          properties: {
+            steps: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Step-by-step solution"
+            },
+            tricks: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Shortcuts or tips"
+            },
+            concept: { type: Type.STRING, description: "The core concept tested" }
+          },
+          required: ["steps", "tricks", "concept"]
+        }
+      },
+      required: ["id", "text", "options", "correctIndex", "explanation"]
+    }
+  };
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+        temperature: 0.7,
+      },
+    });
+
+    const jsonText = response.text;
+    if (!jsonText) {
+      throw new Error("Empty response from AI");
+    }
+    
+    // Parse JSON and ensure IDs are unique if the AI duplicated them (rare but possible)
+    const questions = JSON.parse(jsonText) as Question[];
+    return questions.map((q, index) => ({
+      ...q,
+      id: `ai-gen-${index}-${Date.now()}` // Ensure unique ID on client side
+    }));
+
+  } catch (error) {
+    console.error("Quiz Generation Error:", error);
+    throw error;
+  }
+};

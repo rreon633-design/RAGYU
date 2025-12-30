@@ -1,0 +1,7 @@
+{
+  "name": "RAGYU - Government Jobs Prep",
+  "description": "A comprehensive Indian government job preparation platform for Railway and Bank exams, featuring the AI assistant Libra.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
