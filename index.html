@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -5,6 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RAGYU - Gov Job Prep</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                orange: '#ff9f1c',
+                peach: '#ffbf69',
+                teal: '#2ec4b6',
+                lightcyan: '#cbf3f0',
+              }
+            }
+          }
+        }
+      }
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -22,11 +39,14 @@
       h1, h2, h3, h4, .font-poppins {
         font-family: 'Poppins', sans-serif;
       }
-      .blue-gradient {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      .brand-gradient {
+        background: linear-gradient(135deg, #2ec4b6 0%, #208a80 100%);
+      }
+      .orange-gradient {
+        background: linear-gradient(135deg, #ff9f1c 0%, #ffbf69 100%);
       }
       .bottom-nav-shadow {
-        box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.1), 0 -2px 4px -2px rgb(0 0 0 / 0.1);
+        box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.05), 0 -2px 4px -2px rgb(0 0 0 / 0.05);
       }
       ::-webkit-scrollbar {
         width: 6px;
@@ -35,11 +55,16 @@
         background: #f1f1f1;
       }
       ::-webkit-scrollbar-thumb {
-        background: #3b82f6;
+        background: #2ec4b6;
         border-radius: 10px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #1e3a8a;
+        background: #208a80;
+      }
+      /* Ensure SVG visuals don't overflow */
+      .svg-container svg {
+        max-width: 100%;
+        height: auto;
       }
     </style>
     <script type="importmap">

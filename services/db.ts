@@ -59,7 +59,6 @@ export const registerUser = async (email: string, password: string, name: string
     await updateProfile(userCredential.user, { displayName: name });
     return mapUser({ ...userCredential.user, displayName: name } as FirebaseUser);
   } catch (error: any) {
-    // If domain is unauthorized (localhost/preview), fallback to local user
     if (error.code === 'auth/unauthorized-domain' || error.code === 'auth/operation-not-allowed') {
        console.log("Firebase Auth blocked by domain policy. Falling back to Local Mode.");
        return {
@@ -78,7 +77,6 @@ export const loginUser = async (email: string, password: string): Promise<User> 
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return mapUser(userCredential.user);
   } catch (error: any) {
-    // If domain is unauthorized, fallback to local logic so the user can still enter the app
     if (error.code === 'auth/unauthorized-domain') {
        console.log("Firebase Auth blocked. Falling back to Local Mode.");
        return {
@@ -98,7 +96,6 @@ export const signInWithGoogle = async (): Promise<User> => {
     const result = await signInWithPopup(auth, provider);
     return mapUser(result.user);
   } catch (error: any) {
-    // Catch domain errors and fall back to a simulated Google User
     if (error.code === 'auth/unauthorized-domain' || error.code === 'auth/operation-not-allowed') {
        console.log("Google Sign In blocked by domain policy. Falling back to Local Mode.");
        return {
@@ -132,7 +129,6 @@ export const signInGuest = async (): Promise<User> => {
 const LOCAL_STORAGE_HISTORY_KEY = 'ragyu_local_history';
 
 export const saveQuizResultToDB = async (result: QuizResult, examName: string, subjectName: string, userId: string) => {
-  // 1. Local Fallback for Guests or Offline usage
   if (userId.startsWith('local-')) {
     try {
       const existingData = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
@@ -151,7 +147,6 @@ export const saveQuizResultToDB = async (result: QuizResult, examName: string, s
       
       history.push(newEntry);
       localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(history));
-      console.log("Result saved to LocalStorage");
       return;
     } catch (e) {
       console.error("Failed to save to LocalStorage", e);
@@ -159,7 +154,6 @@ export const saveQuizResultToDB = async (result: QuizResult, examName: string, s
     }
   }
 
-  // 2. Firebase Firestore Storage
   try {
     await addDoc(collection(db, "quiz_history"), {
       userId,
@@ -171,14 +165,12 @@ export const saveQuizResultToDB = async (result: QuizResult, examName: string, s
       totalQuestions: result.totalQuestions,
       fullResult: JSON.stringify(result)
     });
-    console.log("Result saved to Firestore");
   } catch (e) {
     console.error("Failed to save result to Firestore", e);
   }
 };
 
 export const getHistoryFromDB = async (userId: string) => {
-  // 1. Local Fallback Retrieval
   if (userId.startsWith('local-')) {
     try {
       const existingData = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
@@ -203,7 +195,6 @@ export const getHistoryFromDB = async (userId: string) => {
     }
   }
 
-  // 2. Firebase Firestore Retrieval
   try {
     const q = query(
       collection(db, "quiz_history"),
@@ -230,4 +221,53 @@ export const getHistoryFromDB = async (userId: string) => {
     console.error("Failed to fetch history from Firestore", e);
     return [];
   }
+};
+
+/**
+ * Calculates the current daily streak.
+ * A streak is the number of consecutive days (ending today or yesterday) 
+ * where at least one quiz was completed.
+ */
+export const calculateStreak = (history: any[]): number => {
+  if (!history || history.length === 0) return 0;
+
+  // Get unique dates in YYYY-MM-DD format, sorted descending
+  const dates = Array.from(new Set(
+    history.map(h => new Date(h.timestamp).toISOString().split('T')[0])
+  )).sort((a, b) => b.localeCompare(a));
+
+  const today = new Date().toISOString().split('T')[0];
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toISOString().split('T')[0];
+
+  // If the last entry isn't today or yesterday, streak is broken
+  if (dates[0] !== today && dates[0] !== yesterday) {
+    return 0;
+  }
+
+  let streak = 0;
+  let currentRefDate = new Date(dates[0]);
+
+  for (let i = 0; i < dates.length; i++) {
+    const dateStr = dates[i];
+    const dateObj = new Date(dateStr);
+    
+    // Check if this date is consecutive to the previous one in our loop
+    if (i === 0) {
+      streak = 1;
+    } else {
+      const diffTime = Math.abs(currentRefDate.getTime() - dateObj.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 1) {
+        streak++;
+        currentRefDate = dateObj;
+      } else {
+        break; // Streak broken
+      }
+    }
+  }
+
+  return streak;
 };

@@ -1,10 +1,36 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+
+import { GoogleGenAI, Type, Schema, GenerateContentResponse } from "@google/genai";
 import { LIBRA_SYSTEM_PROMPT } from "../constants";
 import { QuizConfig, Question, UserSettings } from "../types";
 
+export const getLibraResponseStream = async function* (history: { role: string; content: string }[]) {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  try {
+    const responseStream = await ai.models.generateContentStream({
+      model: "gemini-3-flash-preview",
+      contents: history.map(h => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: h.content }]
+      })),
+      config: {
+        systemInstruction: LIBRA_SYSTEM_PROMPT,
+        temperature: 0.7,
+      },
+    });
+
+    for await (const chunk of responseStream) {
+      const text = chunk.text;
+      if (text) yield text;
+    }
+  } catch (error) {
+    console.error("Gemini Streaming Error:", error);
+    yield "Something went wrong. Please check your connection or project settings.";
+  }
+};
+
 export const getLibraResponse = async (history: { role: string; content: string }[]) => {
-  // Re-initialize to ensure the latest API Key is used if it changes
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
     const response = await ai.models.generateContent({
@@ -27,7 +53,7 @@ export const getLibraResponse = async (history: { role: string; content: string 
 };
 
 export const generateQuizQuestions = async (config: QuizConfig, userPreferences?: UserSettings): Promise<Question[]> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   let preferencesContext = '';
   if (userPreferences) {
@@ -40,21 +66,21 @@ export const generateQuizQuestions = async (config: QuizConfig, userPreferences?
     }
   }
 
-  const prompt = `Generate ${config.questionCount} multiple-choice questions for the ${config.exam} exam.
+  const prompt = `Generate ${config.questionCount} multiple-choice questions for the ${config.exam} domain.
   Subject: ${config.subject}
   Topics: ${config.topics.length > 0 ? config.topics.join(', ') : 'General syllabus topics'}
   Difficulty: ${config.difficulty}${preferencesContext}
 
   REQUIREMENTS:
-  1. Questions must be highly relevant to Indian Government exams (RRB, IBPS, SBI, SSC).
-  2. Use LaTeX for ANY mathematical expressions or formulas (e.g., $x^2 + y^2$, $\\frac{a}{b}$).
+  1. For TECHNICAL topics (Java, Python, Web Dev, etc.), include code snippets where relevant using markdown code blocks.
+  2. For QUANT/MATH, use LaTeX for ANY mathematical expressions or formulas (e.g., $x^2 + y^2$, $\\frac{a}{b}$).
   3. Provide exactly 4 options for each question.
   4. The 'correctIndex' must be 0, 1, 2, or 3.
   5. The 'explanation' must be detailed and helpful for students.
   6. **CRITICAL**: Include a 'visualAid' field containing a valid raw SVG string (<svg...></svg>) that visually explains the solution. 
+     - For Coding: Draw a logic flow, stack/heap diagram, or memory layout.
      - For Geometry: Draw the labeled shape.
      - For Data Interpretation: Draw a simple bar/pie chart.
-     - For Logic/Reasoning: Draw a flowchart or diagram.
      - Keep SVGs simple, using a standard viewBox="0 0 300 200". Use attractive colors (blues, emeralds, oranges).
   7. Return STRICT JSON.
   `;
@@ -65,7 +91,7 @@ export const generateQuizQuestions = async (config: QuizConfig, userPreferences?
       type: Type.OBJECT,
       properties: {
         id: { type: Type.STRING },
-        text: { type: Type.STRING, description: "The question text. Use markdown and LaTeX where appropriate." },
+        text: { type: Type.STRING, description: "The question text. Use markdown code blocks for code and LaTeX where appropriate." },
         options: {
           type: Type.ARRAY,
           items: { type: Type.STRING },
@@ -111,11 +137,10 @@ export const generateQuizQuestions = async (config: QuizConfig, userPreferences?
       throw new Error("Empty response from AI");
     }
     
-    // Parse JSON and ensure IDs are unique if the AI duplicated them (rare but possible)
     const questions = JSON.parse(jsonText) as Question[];
     return questions.map((q, index) => ({
       ...q,
-      id: `ai-gen-${index}-${Date.now()}` // Ensure unique ID on client side
+      id: `ai-gen-${index}-${Date.now()}`
     }));
 
   } catch (error) {

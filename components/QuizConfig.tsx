@@ -1,33 +1,112 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { EXAM_CATEGORIES, SYLLABUS } from '../constants';
-import { Difficulty, QuizMode, QuizConfig as IQuizConfig } from '../types';
-import { UserIcon, UsersIcon, CheckCircleIcon } from '@heroicons/react/24/solid';
+import { Difficulty, QuizMode, QuizConfig as IQuizConfig, UserSettings, ExamTrack } from '../types';
+import { 
+  UserIcon, 
+  UsersIcon, 
+  CheckCircleIcon, 
+  MagnifyingGlassIcon,
+  TagIcon,
+  XCircleIcon,
+  AdjustmentsHorizontalIcon,
+  ChartBarIcon,
+  HashtagIcon,
+  AcademicCapIcon,
+  CodeBracketIcon,
+  BriefcaseIcon
+} from '@heroicons/react/24/solid';
 
 interface QuizConfigProps {
   onStart: (config: IQuizConfig) => void;
+  userSettings: UserSettings;
 }
 
-const QuizConfig: React.FC<QuizConfigProps> = ({ onStart }) => {
+const QuizConfig: React.FC<QuizConfigProps> = ({ onStart, userSettings }) => {
+  // Determine initial exam track based on last used or preferences
+  const [activeTrack, setActiveTrack] = useState<ExamTrack>(() => {
+    const lastExam = userSettings.lastUsedExam;
+    if (lastExam) {
+      const found = EXAM_CATEGORIES.find(c => c.exams.includes(lastExam));
+      if (found) return found.track;
+    }
+    return ExamTrack.GOVERNMENT;
+  });
+
+  const initialExam = userSettings.lastUsedExam || (userSettings.preferredExams.length > 0 ? userSettings.preferredExams[0] : EXAM_CATEGORIES[0].exams[0]);
+  const initialSubject = userSettings.lastUsedSubject || (userSettings.preferredSubjects.length > 0 ? userSettings.preferredSubjects[0] : SYLLABUS[0].name);
+
   const [config, setConfig] = useState<IQuizConfig>({
-    exam: EXAM_CATEGORIES[0].exams[0],
-    subject: SYLLABUS[0].name,
+    exam: initialExam,
+    subject: initialSubject,
     topics: [],
     questionCount: 5,
     difficulty: Difficulty.MEDIUM,
     mode: QuizMode.SOLO,
-    player1Name: 'Player 1',
-    player2Name: 'Player 2'
+    player1Name: 'Scholar 1',
+    player2Name: 'Scholar 2'
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Filter Categories by Active Track
+  const filteredCategories = useMemo(() => {
+    return EXAM_CATEGORIES.filter(cat => cat.track === activeTrack);
+  }, [activeTrack]);
+
+  // Find category ID for current exam
+  const currentCategory = useMemo(() => {
+    return EXAM_CATEGORIES.find(cat => cat.exams.includes(config.exam));
+  }, [config.exam]);
+
+  // Filter SYLLABUS based on current category
+  const filteredSyllabus = useMemo(() => {
+    if (!currentCategory) return SYLLABUS;
+    return SYLLABUS.filter(item => 
+      !item.examCategoryIds || item.examCategoryIds.includes(currentCategory.id)
+    );
+  }, [currentCategory]);
+
+  // If track changes, auto-select the first exam of that track
+  useEffect(() => {
+    if (filteredCategories.length > 0 && !filteredCategories.some(c => c.exams.includes(config.exam))) {
+      setConfig(prev => ({ ...prev, exam: filteredCategories[0].exams[0] }));
+    }
+  }, [activeTrack, filteredCategories]);
 
   // Reset topics when subject changes
   useEffect(() => {
     setConfig(prev => ({ ...prev, topics: [] }));
+    setSearchTerm('');
   }, [config.subject]);
 
+  // Ensure subject is valid for the current exam category
+  useEffect(() => {
+    const isSubjectValid = filteredSyllabus.some(s => s.name === config.subject);
+    if (!isSubjectValid && filteredSyllabus.length > 0) {
+      setConfig(prev => ({ ...prev, subject: filteredSyllabus[0].name }));
+    }
+  }, [filteredSyllabus, config.subject]);
+
+  const activeSyllabusItem = useMemo(() => 
+    SYLLABUS.find(s => s.name === config.subject), 
+    [config.subject]
+  );
+
+  const filteredTopics = useMemo(() => {
+    if (!activeSyllabusItem) return [];
+    if (!searchTerm) return activeSyllabusItem.subtopics;
+    return activeSyllabusItem.subtopics.filter(t => 
+      t.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [activeSyllabusItem, searchTerm]);
+
   const handleStart = () => {
+    if (config.topics.length === 0) {
+      alert("Please select at least one topic to begin.");
+      return;
+    }
     setIsLoading(true);
     setTimeout(() => {
       onStart(config);
@@ -44,123 +123,180 @@ const QuizConfig: React.FC<QuizConfigProps> = ({ onStart }) => {
     }));
   };
 
-  const selectAllTopics = (subtopics: string[]) => {
-    setConfig(prev => ({
-      ...prev,
-      topics: subtopics
-    }));
+  const selectAll = () => {
+    if (!activeSyllabusItem) return;
+    setConfig(prev => ({ ...prev, topics: [...activeSyllabusItem.subtopics] }));
   };
 
-  const handleSurpriseMe = () => {
-    const randomExamCat = EXAM_CATEGORIES[Math.floor(Math.random() * EXAM_CATEGORIES.length)];
-    const randomExam = randomExamCat.exams[Math.floor(Math.random() * randomExamCat.exams.length)];
-    const randomSyllabus = SYLLABUS[Math.floor(Math.random() * SYLLABUS.length)];
-    const difficulties = [Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD];
-    
-    setConfig({
-      ...config,
-      exam: randomExam,
-      subject: randomSyllabus.name,
-      topics: [randomSyllabus.subtopics[Math.floor(Math.random() * randomSyllabus.subtopics.length)]],
-      questionCount: Math.floor(Math.random() * (120 - 5) + 5),
-      difficulty: difficulties[Math.floor(Math.random() * 3)],
-    });
+  const clearAll = () => {
+    setConfig(prev => ({ ...prev, topics: [] }));
   };
-
-  const activeSyllabus = SYLLABUS.find(s => s.name === config.subject);
 
   return (
-    <div className="space-y-8 animate-in slide-in-from-bottom duration-500 pb-12">
-      <header className="flex justify-between items-center">
+    <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-500 pb-24">
+      <header className="flex justify-between items-center px-2">
         <div>
-          <h1 className="text-2xl font-bold font-poppins text-gray-900">Quiz Setup</h1>
-          <p className="text-sm text-gray-500">Customize your practice session</p>
+          <h1 className="text-4xl font-black font-poppins text-gray-900 tracking-tight text-brand-teal">Practice Arena</h1>
+          <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest mt-1">Configure your personalized session</p>
         </div>
-        <button 
-          onClick={handleSurpriseMe}
-          className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors"
-          title="Surprise Me"
-        >
-          🎲
-        </button>
+        <div className="w-14 h-14 bg-brand-lightcyan/50 text-brand-teal rounded-2xl flex items-center justify-center shadow-inner border border-brand-teal/10">
+          <AdjustmentsHorizontalIcon className="w-7 h-7" />
+        </div>
       </header>
 
-      {/* Mode Selection - High Impact UI */}
-      <section className="space-y-3">
-        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Select Mode</label>
-        <div className="grid grid-cols-2 gap-4">
+      {/* TRACK SELECTOR */}
+      <section className="space-y-5">
+        <div className="flex items-center space-x-2 ml-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal"></span>
+          <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Select Study Track</label>
+        </div>
+        <div className="flex p-1.5 bg-gray-100 rounded-[2.5rem] border-2 border-transparent">
+          {[
+            { id: ExamTrack.GOVERNMENT, label: 'Govt. Exams', icon: BriefcaseIcon },
+            { id: ExamTrack.CODING, label: 'Coding & Tech', icon: CodeBracketIcon },
+            { id: ExamTrack.ACADEMIC, label: 'Entrance / Boards', icon: AcademicCapIcon }
+          ].map((track) => (
+            <button
+              key={track.id}
+              onClick={() => setActiveTrack(track.id)}
+              className={`flex-1 py-4 px-2 rounded-[2rem] text-[10px] font-black uppercase tracking-widest flex items-center justify-center space-x-2 transition-all ${
+                activeTrack === track.id 
+                ? 'bg-white text-brand-teal shadow-xl shadow-brand-lightcyan/40 scale-[1.02]' 
+                : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <track.icon className={`w-4 h-4 ${activeTrack === track.id ? 'text-brand-teal' : 'text-gray-300'}`} />
+              <span className="hidden sm:inline">{track.label}</span>
+              <span className="sm:hidden">{track.id === ExamTrack.GOVERNMENT ? 'Govt' : track.id === ExamTrack.CODING ? 'Code' : 'Acad'}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Mode Selection */}
+      <section className="space-y-5">
+        <div className="flex items-center space-x-2 ml-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal"></span>
+          <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Training Mode</label>
+        </div>
+        <div className="grid grid-cols-2 gap-5">
           <button 
             onClick={() => setConfig({ ...config, mode: QuizMode.SOLO })}
-            className={`flex flex-col items-center p-5 rounded-3xl border-2 transition-all relative ${
+            className={`flex flex-col items-center p-7 rounded-[2.8rem] border-2 transition-all relative group ${
               config.mode === QuizMode.SOLO 
-              ? 'border-blue-600 bg-blue-50/50 shadow-lg shadow-blue-100' 
-              : 'border-gray-100 bg-white hover:border-blue-200 shadow-sm'
+              ? 'border-brand-teal bg-brand-lightcyan/30 shadow-xl shadow-brand-lightcyan/40' 
+              : 'border-gray-50 bg-white hover:border-brand-teal/20'
             }`}
           >
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 transition-colors ${config.mode === QuizMode.SOLO ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-400'}`}>
-              <UserIcon className="w-6 h-6" />
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 ${config.mode === QuizMode.SOLO ? 'bg-brand-teal text-white shadow-lg' : 'bg-gray-50 text-gray-300'}`}>
+              <UserIcon className="w-8 h-8" />
             </div>
-            <span className={`text-sm font-bold ${config.mode === QuizMode.SOLO ? 'text-blue-900' : 'text-gray-500'}`}>Solo Practice</span>
-            {config.mode === QuizMode.SOLO && <CheckCircleIcon className="absolute top-3 right-3 w-5 h-5 text-blue-600" />}
+            <span className={`text-xs font-black uppercase tracking-widest ${config.mode === QuizMode.SOLO ? 'text-brand-teal' : 'text-gray-400'}`}>Solo Focus</span>
           </button>
 
           <button 
             onClick={() => setConfig({ ...config, mode: QuizMode.VERSUS })}
-            className={`flex flex-col items-center p-5 rounded-3xl border-2 transition-all relative ${
+            className={`flex flex-col items-center p-7 rounded-[2.8rem] border-2 transition-all relative group ${
               config.mode === QuizMode.VERSUS 
-              ? 'border-rose-500 bg-rose-50/50 shadow-lg shadow-rose-100' 
-              : 'border-gray-100 bg-white hover:border-rose-200 shadow-sm'
+              ? 'border-brand-orange bg-brand-peach/10 shadow-xl shadow-brand-peach/20' 
+              : 'border-gray-50 bg-white hover:border-brand-orange/20'
             }`}
           >
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 transition-colors ${config.mode === QuizMode.VERSUS ? 'bg-rose-500 text-white' : 'bg-gray-50 text-gray-400'}`}>
-              <UsersIcon className="w-6 h-6" />
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-5 transition-transform group-hover:scale-110 ${config.mode === QuizMode.VERSUS ? 'bg-brand-orange text-white shadow-lg' : 'bg-gray-50 text-gray-300'}`}>
+              <UsersIcon className="w-8 h-8" />
             </div>
-            <span className={`text-sm font-bold ${config.mode === QuizMode.VERSUS ? 'text-rose-900' : 'text-gray-500'}`}>1 vs 1 Battle</span>
-            {config.mode === QuizMode.VERSUS && <CheckCircleIcon className="absolute top-3 right-3 w-5 h-5 text-rose-500" />}
+            <span className={`text-xs font-black uppercase tracking-widest ${config.mode === QuizMode.VERSUS ? 'text-brand-orange' : 'text-gray-400'}`}>1v1 Challenge</span>
           </button>
         </div>
-      </section>
 
-      {/* 1vs1 Inputs - Light & Clean UI */}
-      {config.mode === QuizMode.VERSUS && (
-        <section className="space-y-4 p-4 bg-gray-50 rounded-3xl border border-gray-100 animate-in fade-in slide-in-from-top duration-300">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">Player 1 Name</label>
+        {config.mode === QuizMode.VERSUS && (
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Player 1 Name</label>
               <input 
                 type="text" 
                 value={config.player1Name} 
-                onChange={(e) => setConfig({ ...config, player1Name: e.target.value })}
-                className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-2xl text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
-                placeholder="Enter Name"
+                onChange={(e) => setConfig({...config, player1Name: e.target.value})}
+                className="w-full px-5 py-4 bg-white border-2 border-gray-100 rounded-2xl focus:border-brand-teal outline-none text-sm font-bold text-gray-700"
+                placeholder="Name"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">Player 2 Name</label>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Player 2 Name</label>
               <input 
                 type="text" 
                 value={config.player2Name} 
-                onChange={(e) => setConfig({ ...config, player2Name: e.target.value })}
-                className="w-full px-4 py-2.5 bg-white border border-rose-200 rounded-2xl text-sm font-medium text-gray-700 focus:ring-2 focus:ring-rose-500 focus:border-transparent outline-none transition-all"
-                placeholder="Enter Name"
+                onChange={(e) => setConfig({...config, player2Name: e.target.value})}
+                className="w-full px-5 py-4 bg-white border-2 border-gray-100 rounded-2xl focus:border-brand-orange outline-none text-sm font-bold text-gray-700"
+                placeholder="Name"
               />
             </div>
           </div>
-        </section>
-      )}
+        )}
+      </section>
 
-      {/* Exam Category */}
-      <section className="space-y-3">
-        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Target Exam</label>
-        <div className="flex flex-wrap gap-2">
-          {EXAM_CATEGORIES.flatMap(c => c.exams).map(exam => (
+      {/* Intensity & Scale */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="space-y-5">
+          <div className="flex items-center space-x-2 ml-1">
+            <ChartBarIcon className="w-4 h-4 text-brand-teal" />
+            <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Difficulty Level</label>
+          </div>
+          <div className="flex p-1.5 bg-gray-50 border border-gray-100 rounded-[2rem]">
+            {[Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD].map((level) => (
+              <button
+                key={level}
+                onClick={() => setConfig({ ...config, difficulty: level })}
+                className={`flex-1 py-4 text-[10px] font-black rounded-[1.5rem] transition-all uppercase tracking-widest ${
+                  config.difficulty === level 
+                  ? 'bg-white text-brand-teal shadow-md border border-brand-teal/10' 
+                  : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="flex items-center space-x-2 ml-1">
+            <HashtagIcon className="w-4 h-4 text-brand-teal" />
+            <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Question Count ({config.questionCount})</label>
+          </div>
+          <div className="bg-white border-2 border-gray-50 rounded-[2rem] p-6">
+            <input 
+              type="range" 
+              min="5" 
+              max="100" 
+              step="5"
+              value={config.questionCount}
+              onChange={(e) => setConfig({...config, questionCount: parseInt(e.target.value)})}
+              className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-brand-teal"
+            />
+            <div className="flex justify-between mt-3 text-[10px] font-black text-gray-300 uppercase tracking-tighter">
+              <span>Min: 5</span>
+              <span>Max: 100</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Target Examination */}
+      <section className="space-y-5">
+        <div className="flex items-center space-x-2 ml-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal"></span>
+          <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Target Examination ({activeTrack.toUpperCase()})</label>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {filteredCategories.flatMap(c => c.exams).map(exam => (
             <button
               key={exam}
               onClick={() => setConfig({ ...config, exam })}
-              className={`px-4 py-2 rounded-xl border text-[11px] font-bold transition-all ${
+              className={`px-6 py-4 rounded-2xl border-2 text-[10px] font-black uppercase tracking-widest transition-all ${
                 config.exam === exam 
-                ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
-                : 'bg-white text-gray-600 border-gray-100 hover:border-blue-300 hover:bg-blue-50/30'
+                ? 'bg-brand-teal text-white border-brand-teal shadow-lg shadow-brand-lightcyan/50 scale-[1.03]' 
+                : 'bg-white text-gray-500 border-gray-100 hover:border-brand-teal/30 hover:bg-gray-50'
               }`}
             >
               {exam}
@@ -169,117 +305,144 @@ const QuizConfig: React.FC<QuizConfigProps> = ({ onStart }) => {
         </div>
       </section>
 
-      {/* Subject Area */}
-      <section className="space-y-3">
-        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Subject Area</label>
-        <div className="grid grid-cols-2 gap-3">
-          {SYLLABUS.map(item => (
+      {/* Core Domain - FILTERED */}
+      <section className="space-y-5">
+        <div className="flex items-center space-x-2 ml-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-brand-teal"></span>
+          <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Relevant Core Domains</label>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {filteredSyllabus.map(item => (
             <button
               key={item.id}
               onClick={() => setConfig({ ...config, subject: item.name })}
-              className={`px-4 py-3.5 rounded-2xl border text-sm font-bold transition-all text-left flex justify-between items-center ${
+              className={`px-8 py-6 rounded-[2.2rem] border-2 text-[11px] font-black uppercase tracking-widest transition-all text-left flex justify-between items-center group ${
                 config.subject === item.name 
-                ? 'bg-blue-600 text-white border-blue-600 shadow-md' 
-                : 'bg-white text-gray-600 border-gray-100 hover:border-blue-200'
+                ? 'bg-brand-teal text-white border-brand-teal shadow-xl shadow-brand-lightcyan/40' 
+                : 'bg-white text-gray-500 border-gray-100 hover:border-brand-teal/20 shadow-sm'
               }`}
             >
-              {item.name}
-              {config.subject === item.name && <CheckCircleIcon className="w-5 h-5 text-blue-200" />}
+              <div className="flex flex-col">
+                <span>{item.name}</span>
+                <span className={`text-[8px] mt-1 font-bold ${config.subject === item.name ? 'text-white/70' : 'text-gray-300'}`}>
+                  {item.subtopics.length} Specializations
+                </span>
+              </div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${config.subject === item.name ? 'bg-white/20' : 'bg-gray-50 text-gray-300'}`}>
+                {config.subject === item.name ? <CheckCircleIcon className="w-5 h-5" /> : <TagIcon className="w-4 h-4" />}
+              </div>
             </button>
           ))}
         </div>
       </section>
 
-      {/* Sub-topics - LIST ALL CLEARLY */}
-      {activeSyllabus && (
-        <section className="space-y-3 p-5 bg-blue-50/30 rounded-3xl border border-blue-100 animate-in fade-in duration-300">
-          <div className="flex justify-between items-center">
-            <label className="text-xs font-bold text-blue-800 uppercase tracking-widest">Select Topics</label>
-            <button 
-              onClick={() => selectAllTopics(activeSyllabus.subtopics)}
-              className="text-[10px] font-bold text-blue-600 hover:underline"
-            >
-              Select All
-            </button>
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            {activeSyllabus.subtopics.map(topic => {
-              const isSelected = config.topics.includes(topic);
-              return (
-                <button
-                  key={topic}
-                  onClick={() => toggleTopic(topic)}
-                  className={`flex items-center px-4 py-3 rounded-2xl border-2 transition-all ${
-                    isSelected
-                    ? 'bg-white border-blue-500 text-blue-700 shadow-sm'
-                    : 'bg-white/50 border-transparent text-gray-500 hover:bg-white hover:border-blue-200'
-                  }`}
-                >
-                  <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center transition-all ${isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}`}>
-                    {isSelected && <CheckCircleIcon className="w-4 h-4 text-white" />}
-                  </div>
-                  <span className={`text-xs font-bold ${isSelected ? 'text-blue-900' : 'text-gray-600'}`}>
-                    {topic}
-                  </span>
-                </button>
-              );
-            })}
+      {/* Curriculum Breakdown */}
+      {activeSyllabusItem && (
+        <section className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-gray-50/50 rounded-[3.5rem] border-2 border-gray-100 p-8 sm:p-12">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-10">
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-gray-900 tracking-tight uppercase">Curriculum Breakdown</h3>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Master specific sub-topics for {config.subject}</p>
+              </div>
+              <div className="flex items-center space-x-3 bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100 w-full sm:w-72 group focus-within:border-brand-teal transition-all">
+                <MagnifyingGlassIcon className="w-5 h-5 text-gray-300 group-focus-within:text-brand-teal" />
+                <input 
+                  type="text" 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Filter topics..." 
+                  className="bg-transparent border-none focus:ring-0 text-sm font-bold placeholder:text-gray-300 w-full"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mb-8 px-2">
+              <div className="flex items-center space-x-3">
+                <div className="bg-brand-teal text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-brand-lightcyan">
+                  {config.topics.length} Selected
+                </div>
+                {config.topics.length > 0 && (
+                  <button onClick={clearAll} className="text-[10px] font-black text-rose-400 hover:text-rose-600 uppercase tracking-widest flex items-center space-x-1">
+                    <XCircleIcon className="w-4 h-4" />
+                    <span>Clear</span>
+                  </button>
+                )}
+              </div>
+              <button onClick={selectAll} className="text-[10px] font-black text-brand-teal hover:underline uppercase tracking-[0.2em]">Select All</button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              {filteredTopics.length > 0 ? (
+                filteredTopics.map((topic, idx) => {
+                  const isSelected = config.topics.includes(topic);
+                  const originalIndex = activeSyllabusItem.subtopics.indexOf(topic) + 1;
+                  
+                  return (
+                    <button
+                      key={topic}
+                      onClick={() => toggleTopic(topic)}
+                      className={`flex items-center text-left p-5 rounded-[1.8rem] border-2 transition-all group ${
+                        isSelected
+                        ? 'bg-white border-brand-teal shadow-lg shadow-brand-lightcyan/30'
+                        : 'bg-white border-transparent text-gray-500 hover:border-gray-200'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-black text-[11px] mr-5 transition-all ${
+                        isSelected ? 'bg-brand-teal text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-gray-200'
+                      }`}>
+                        {originalIndex.toString().padStart(2, '0')}
+                      </div>
+                      <span className={`text-[11px] font-black uppercase tracking-tight flex-1 leading-snug ${isSelected ? 'text-gray-900' : 'text-gray-400'}`}>
+                        {topic}
+                      </span>
+                      {isSelected && <CheckCircleIcon className="w-6 h-6 text-brand-teal ml-2" />}
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="col-span-2 py-20 flex flex-col items-center justify-center text-gray-300">
+                   <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                      <MagnifyingGlassIcon className="w-8 h-8 opacity-20" />
+                   </div>
+                   <p className="text-[10px] font-black uppercase tracking-widest">No matching topics found</p>
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}
 
-      {/* Sliders and Toggles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <section className="space-y-4">
-          <div className="flex justify-between items-center px-1">
-            <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Question Count</label>
-            <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">{config.questionCount}</span>
-          </div>
-          <input 
-            type="range" min="5" max="120" step="5"
-            value={config.questionCount}
-            onChange={(e) => setConfig({ ...config, questionCount: parseInt(e.target.value) })}
-            className="w-full h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
-          />
-        </section>
-
-        <section className="space-y-3">
-          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Difficulty</label>
-          <div className="flex p-1 bg-gray-100 rounded-2xl">
-            {[Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD].map(d => (
-              <button 
-                key={d}
-                onClick={() => setConfig({ ...config, difficulty: d })}
-                className={`flex-1 py-2.5 text-[10px] font-bold rounded-xl transition-all capitalize ${
-                  config.difficulty === d 
-                  ? (d === Difficulty.EASY ? 'bg-emerald-500' : d === Difficulty.MEDIUM ? 'bg-amber-500' : 'bg-rose-500') + ' text-white shadow-md' 
-                  : 'text-gray-500 hover:text-gray-800'
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      {/* Start Button */}
-      <div className="pt-4">
+      {/* Deployment Action */}
+      <div className="fixed bottom-20 left-0 right-0 px-6 sm:static sm:px-0 sm:pt-6 z-40 pointer-events-none">
         <button 
           onClick={handleStart}
-          disabled={isLoading}
-          className="w-full py-5 blue-gradient text-white font-bold rounded-3xl shadow-2xl shadow-blue-200 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center text-lg tracking-tight"
+          disabled={isLoading || config.topics.length === 0}
+          className={`pointer-events-auto w-full max-w-4xl mx-auto py-7 text-white font-black rounded-[2.8rem] shadow-2xl transition-all flex items-center justify-center text-xl uppercase tracking-tighter ${
+            config.topics.length === 0 
+            ? 'bg-gray-100 text-gray-300 cursor-not-allowed shadow-none' 
+            : 'brand-gradient shadow-brand-lightcyan hover:scale-[1.01] active:scale-95'
+          }`}
         >
           {isLoading ? (
-            <div className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+            <div className="flex items-center space-x-3">
+               <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+               <span className="text-sm font-black uppercase tracking-[0.2em]">Deploying Mission</span>
+            </div>
           ) : (
             <>
-              {config.mode === QuizMode.SOLO ? 'Start Practice' : 'Start Battle'}
-              <span className="ml-2 opacity-50 text-sm font-normal">→</span>
+              {config.mode === QuizMode.SOLO ? 'Initiate Solo Mastery' : 'Commence 1v1 Battle'}
             </>
           )}
         </button>
       </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+      `}} />
     </div>
   );
 };

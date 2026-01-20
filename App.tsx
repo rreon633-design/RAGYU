@@ -6,6 +6,7 @@ import QuizConfig from './components/QuizConfig';
 import QuizSession from './components/QuizSession';
 import QuizReport from './components/QuizReport';
 import LibraChat from './components/LibraChat';
+import CompileScreen from './components/CompileScreen';
 import SettingsModal from './components/SettingsModal';
 import Auth from './components/Auth';
 import { AppTab, QuizConfig as IQuizConfig, QuizResult, UserSettings, User } from './types';
@@ -26,6 +27,12 @@ const App: React.FC = () => {
   const [isQuizActive, setIsQuizActive] = useState(false);
   const [quizConfig, setQuizConfig] = useState<IQuizConfig | null>(null);
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
+
+  // Expose settings opening globally for dashboard deep links
+  useEffect(() => {
+    (window as any).openRAGYUSettings = () => setIsSettingsOpen(true);
+    return () => { delete (window as any).openRAGYUSettings; };
+  }, []);
 
   // Initialize DB and Load User/Settings
   useEffect(() => {
@@ -58,10 +65,22 @@ const App: React.FC = () => {
     localStorage.setItem('ragyu_settings', JSON.stringify(newSettings));
   };
 
-  const startQuiz = (config: IQuizConfig) => {
-    setQuizConfig(config);
-    setQuizResult(null);
-    setIsQuizActive(true);
+  const startQuiz = (config?: IQuizConfig) => {
+    if (config) {
+      setQuizConfig(config);
+      setQuizResult(null);
+      setIsQuizActive(true);
+      
+      // Persist last used exam and subject
+      const updatedSettings: UserSettings = {
+        ...userSettings,
+        lastUsedExam: config.exam,
+        lastUsedSubject: config.subject
+      };
+      saveSettings(updatedSettings);
+    } else {
+      setActiveTab(AppTab.QUIZ);
+    }
   };
 
   const completeQuiz = (result: QuizResult) => {
@@ -69,8 +88,6 @@ const App: React.FC = () => {
     setIsQuizActive(false);
 
     if (currentUser) {
-      // Save result to Firebase for all users (including guests with UIDs)
-      // Optional: If you don't want to save guest data, check if (!currentUser.isGuest)
       const exam = quizConfig?.exam || 'General';
       const subject = quizConfig?.subject || 'Practice';
       saveQuizResultToDB(result, exam, subject, currentUser.id);
@@ -83,7 +100,6 @@ const App: React.FC = () => {
     setIsQuizActive(false);
   };
 
-  // If not logged in, show Auth screen
   if (!currentUser) {
     return <Auth onLogin={handleLogin} />;
   }
@@ -95,19 +111,22 @@ const App: React.FC = () => {
           result={quizResult} 
           config={quizConfig!} 
           onDone={resetQuizFlow} 
+          userId={currentUser.id}
         />
       );
     }
 
     switch (activeTab) {
       case AppTab.HOME:
-        return <Dashboard user={currentUser} onStartQuiz={() => setActiveTab(AppTab.QUIZ)} />;
+        return <Dashboard user={currentUser} settings={userSettings} onStartQuiz={startQuiz} />;
       case AppTab.QUIZ:
-        return <QuizConfig onStart={startQuiz} />;
+        return <QuizConfig onStart={startQuiz} userSettings={userSettings} />;
+      case AppTab.COMPILE:
+        return <CompileScreen />;
       case AppTab.CHATBOT:
         return <LibraChat />;
       default:
-        return <Dashboard user={currentUser} onStartQuiz={() => setActiveTab(AppTab.QUIZ)} />;
+        return <Dashboard user={currentUser} settings={userSettings} onStartQuiz={startQuiz} />;
     }
   };
 
@@ -120,7 +139,6 @@ const App: React.FC = () => {
     >
       {renderTabContent()}
       
-      {/* Quiz Overlay Session */}
       {isQuizActive && quizConfig && (
         <QuizSession 
           config={quizConfig} 
@@ -130,7 +148,6 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Settings Modal */}
       <SettingsModal 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
